@@ -448,8 +448,17 @@ int main()
             //Print attributes
             //stat <filename> or <directory name>
             printf("stat\n");
-            FormatDirName(token[1]);
-            stat(NextDir);
+            if(!strcmp(token[1],".."))
+            {
+                stat(token[1]);
+            }
+            else
+            {
+                FormatDirName(token[1]);
+                stat(NextDir);
+            }
+            
+            
         }
         else if( !strcmp(token[0], "get") )
         {
@@ -479,6 +488,33 @@ int main()
             }
             else
             {
+                 char *path_token = malloc(strlen(token[1]));
+                memset( path_token, '\0', strlen(token[1]) );
+                memcpy( path_token, token[1], strlen(token[1]));
+                
+                char *_token_ = strtok(path_token,"/");
+                while( _token_ )
+                {
+                    printf("%s\n",_token_);
+                    if( !strcmp(_token_,"..") )
+                    {
+                        change_dir(_token_);
+                    }
+                    else
+                    {
+                        FormatDirName(_token_);
+                        if(ext)
+                        {
+                            printf("Can not cd into file\n");
+                        }
+                        else
+                        {
+                            change_dir(NextDir);
+                        }
+                    }
+                    _token_ = strtok( NULL, "/" );  
+                }
+                /*
                 if( !strcmp(token[1],"..") )
                 {
                     change_dir(token[1]);
@@ -494,7 +530,8 @@ int main()
                     {
                         change_dir(NextDir);
                     }
-                }                
+                }
+                */                
             }
         }
         else if( !strcmp(token[0], "ls") )
