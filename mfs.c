@@ -1,7 +1,3 @@
-/* Michael Rao
- * 04/17/2020
- * FAT32 Assignment
-*/
 
 #define _GNU_SOURCE
 
@@ -42,6 +38,7 @@ int32_t  CWD; // Current Working Directory
 int32_t  RootDirSectors = 0;
 int32_t  FirstDataSector = 0;
 int32_t  FirstSectorofCluster = 0;
+int ext = 0;
 
 #define WHITESPACE " \t\n"      // We want to split our command line up into tokens
                                 // so we need to define what delimits our tokens.
@@ -68,7 +65,7 @@ int LBAToOffset(int32_t sector)
  * Function    : NextLB
  * Parameters  : Logical block address
  * Returns     : The next logical block address
- * Description : Given a logical block address, look uo into the first FAT and retrun the 
+ * Description : Given a logical block address, look up into the first FAT and retrun the 
  * logical block address of the block in the file. If there is no further blocks then it returns -1
 */ 
 int16_t NextLB( uint32_t sector )
@@ -88,6 +85,7 @@ int16_t NextLB( uint32_t sector )
 */ 
 void FormatDirName(char *dir_name)
 {
+    ext = 0;
     char expanded_name[12];
     memset( expanded_name, ' ', 12 );
 
@@ -100,6 +98,7 @@ void FormatDirName(char *dir_name)
     if( token )
     {
         strncpy( (char*)(expanded_name+8), token, strlen(token) );
+        ext = 1;
     }
 
     expanded_name[11] = '\0';
@@ -124,7 +123,7 @@ void newImage(char *filename)
     fp = fopen(filename, "r");
     if( !fp )
     {
-        printf("ERRO: No such file named %s", filename);
+        printf("ERRO: No such file named %s\n", filename);
         return;
     }
 
@@ -180,8 +179,12 @@ void ListFiles()
     for(i = 0; i < 16; i++)
     {
         if(dir[i].DIR_Attr == 0x01 || dir[i].DIR_Attr == 0x10 ||
-           dir[i].DIR_Attr == 0x20 && dir[i].DIR_Name[0] != (char)0xe5)
+           dir[i].DIR_Attr == 0x20 || dir[i].DIR_Attr == 0x30 )
         {   
+            if((unsigned char)dir[i].DIR_Name[0] == 0xe5)
+            {
+                continue;
+            }
             char *file_name = malloc(11);
             memset( file_name, '\0', 11 );
             memcpy( file_name, dir[i].DIR_Name,11 ); 
@@ -218,7 +221,6 @@ void change_dir(char * dir_name)
 
            fseek( fp, offset, SEEK_SET );
            fread(&dir[0], 16, sizeof( struct DirectoryEntry ), fp);
-           printf("%s\n",dir[0].DIR_Name);
            return;
         }
     }
@@ -231,8 +233,8 @@ void change_dir(char * dir_name)
 */ 
 void stat(char * dir_name)
 {
-    int i; 
-    int offset;
+    int i;
+    
     for(i = 0; i < 16; i++)
     {
         if(!strncmp(dir[i].DIR_Name,dir_name,strlen(dir_name)))
@@ -240,11 +242,97 @@ void stat(char * dir_name)
             
             printf("Attribute: %d\n",dir[i].DIR_Attr);
             printf("Cluster Start: %d\n",dir[i].DIR_FirstClusterLow);
-            printf("Name: %s\n",dir[i].DIR_Name);
+            char *file_name = malloc(11);
+            memset( file_name, '\0', 11 );
+            memcpy( file_name, dir[i].DIR_Name,11 ); 
+            printf( "Name: %s\n",file_name );
+            
             return;
         }
     }
+    printf("ERROR: File not found.\n");
+    return;
 }
+
+/*
+ * Function    : get
+ * Parameters  : char * dir_name
+ * Returns     : No return value (void)
+ * Description : Retrieves a file that is on the FAT32 and saves it to the 
+ * current working directory  
+*/ 
+void get(char * dir_name)
+{
+    int i; 
+    int offset;
+    int size;
+    
+    char *file_name = malloc(12);
+    memset( file_name, '\0', 12 );
+    memcpy( file_name, dir_name, 12);
+
+    FormatDirName(dir_name);
+    
+    FILE *local_file;
+    for(i = 0; i < 16; i++)
+    {
+        if(!strncmp(dir[i].DIR_Name,NextDir,strlen(NextDir)))
+        {
+            size = dir[i].DIR_FileSize;
+            offset = LBAToOffset(dir[i].DIR_FirstClusterLow);
+            fseek( fp, offset, SEEK_SET );
+            printf("%d\n",size);
+            char value[size];
+            printf("here 2\n");
+            local_file = fopen(file_name, "w");
+            printf("here 3\n");
+            fread(value, size, 1, fp);
+            fwrite(value, size, 1, local_file);
+            fclose(local_file);
+            printf("get succesfull.\n");
+            return;
+        }
+    }
+    printf("ERROR: File not found.\n");
+    return;
+}
+
+/*
+ * Function    : read__
+ * Parameters  : char * dir_name, int position, int num_bytes
+ * Returns     : No return value (void)
+ * Description : Finds the indicated file, finds the indicated position
+ * reads and displays the disgnated amount of bytes
+*/ 
+void read__(char * dir_name, int position, int num_bytes)
+{
+    int i;
+    uint8_t val; 
+    int offset;
+    int cluster;
+    FormatDirName(dir_name);
+    printf("%s\n",NextDir);
+    for(i = 0; i < 16; i++)
+    {
+        if(!strncmp(dir[i].DIR_Name,NextDir,strlen(NextDir)))
+        {
+            offset = LBAToOffset(dir[i].DIR_FirstClusterLow);
+            fseek(fp, offset + position, SEEK_SET);
+
+            int j;
+            for(j = 0; j < num_bytes; j++)
+            {
+                fread(&val, 1, 1, fp);
+                printf("%d ",val);
+            }
+            printf("\n");
+            return;
+        }
+    }
+    printf("ERROR: File not found.\n");
+    return;
+}
+
 int main()
 {
 
@@ -328,7 +416,17 @@ int main()
         else if( !strcmp(token[0], "close") )
         {
             //CLOSE FILE
-            printf("close\n");
+            if(fp == NULL)
+            {
+                printf("ERROR: No File currently open.\n");
+            }
+            else
+            {
+               fclose(fp);
+               fp = NULL;
+               printf("File has been closed\n");
+            }
+            
         }
         else if( !strcmp(token[0], "info") )
         {
@@ -338,8 +436,11 @@ int main()
             printf("BPB_SecPerClus: %d\n",BPB_SecPerClus);
             printf("BPB_SecPerClus: %x\n\n",BPB_SecPerClus);
             printf("BPB_RsvdSecCnt: %d\n", BPB_RsvdSecCnt);
+            printf("BPB_RsvdSecCnt: %x\n\n", BPB_RsvdSecCnt);
             printf("BPB_NumFATs: %d\n",BPB_NumFATs);
+            printf("BPB_NumFATs: %x\n\n",BPB_NumFATs);
             printf("BPB_FATSz32: %d\n", BPB_FATSz32);
+            printf("BPB_FATSz32: %x\n\n", BPB_FATSz32);
 
         }
         else if( !strcmp(token[0], "stat") )
@@ -355,6 +456,17 @@ int main()
             //Retrieve file from FAT 32 img
             //get <filename>
             printf("get\n");
+            if(token[1] == NULL)
+            {
+                printf("ERROR: invalid argument 1.\n");
+            }
+            else
+            {
+                printf("%s\n",token[1]);
+        
+                get(token[1]);
+            }
+            
         }
         else if( !strcmp(token[0], "cd") )
         {
@@ -374,7 +486,14 @@ int main()
                 else
                 {
                     FormatDirName(token[1]);
-                    change_dir(NextDir);
+                    if(ext)
+                    {
+                        printf("Can not cd into file\n");
+                    }
+                    else
+                    {
+                        change_dir(NextDir);
+                    }
                 }                
             }
         }
@@ -391,6 +510,15 @@ int main()
             //OUTPUTS the number of bytes specified
             //read <filename> <position> <number of bytes>
             printf("read\n");
+            if(token_count < 4)
+            {
+                printf("ERROR: invalid number of arguments.\n");
+            }
+            else
+            {
+                read__(token[1], atoi(token[2]), atoi(token[3]));
+            }
+            
         }
 
         free(working_root);
