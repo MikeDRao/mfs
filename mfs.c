@@ -74,6 +74,7 @@ int16_t NextLB( uint32_t sector )
     int16_t val;
     fseek( fp, FATAddress, SEEK_SET );
     fread( &val, 2, 1, fp );
+    printf("%d", val);
     return val;
 }
 
@@ -185,6 +186,12 @@ void ListFiles()
             {
                 continue;
             }
+            /*
+            if ((unsigned char)dir[i].DIR_Name[0] == 0x05)
+            {
+                dir[i].DIR_
+            }
+            */
             char *file_name = malloc(11);
             memset( file_name, '\0', 11 );
             memcpy( file_name, dir[i].DIR_Name,11 ); 
@@ -264,7 +271,7 @@ void stat(char * dir_name)
 void get(char * dir_name)
 {
     int i; 
-    int offset;
+    uint offset;
     int size;
     
     char *file_name = malloc(12);
@@ -278,18 +285,33 @@ void get(char * dir_name)
     {
         if(!strncmp(dir[i].DIR_Name,NextDir,strlen(NextDir)))
         {
-            size = dir[i].DIR_FileSize;
-            offset = LBAToOffset(dir[i].DIR_FirstClusterLow);
-            fseek( fp, offset, SEEK_SET );
-            printf("%d\n",size);
-            char value[size];
-            printf("here 2\n");
             local_file = fopen(file_name, "w");
-            printf("here 3\n");
-            fread(value, size, 1, fp);
-            fwrite(value, size, 1, local_file);
+            size = dir[i].DIR_FileSize;
+            int16_t nxt_lb = NextLB(dir[i].DIR_FirstClusterLow);
+            offset = LBAToOffset(dir[i].DIR_FirstClusterLow);
+
+            uint8_t value[size];
+
+            while(size > 512)
+            {
+                fseek( fp, offset, SEEK_SET );
+                fread(&value, 512, 1, fp);
+                fwrite(&value, 512, 1, local_file);
+                size -= 512;                
+                nxt_lb = NextLB(offset);
+                offset = LBAToOffset(nxt_lb);
+
+            }
+
+            fseek( fp, offset, SEEK_SET );
+            fread(&value, size, 1, fp);
+            fwrite(&value, size, 1, local_file);
+            
+            
+            
+            
             fclose(local_file);
-            printf("get succesfull.\n");
+            
             return;
         }
     }
@@ -311,7 +333,7 @@ void read__(char * dir_name, int position, int num_bytes)
     int offset;
     int cluster;
     FormatDirName(dir_name);
-    printf("%s\n",NextDir);
+
     for(i = 0; i < 16; i++)
     {
         if(!strncmp(dir[i].DIR_Name,NextDir,strlen(NextDir)))
@@ -464,15 +486,12 @@ int main()
         {
             //Retrieve file from FAT 32 img
             //get <filename>
-            printf("get\n");
             if(token[1] == NULL)
             {
                 printf("ERROR: invalid argument 1.\n");
             }
             else
             {
-                printf("%s\n",token[1]);
-        
                 get(token[1]);
             }
             
@@ -491,11 +510,20 @@ int main()
                  char *path_token = malloc(strlen(token[1]));
                 memset( path_token, '\0', strlen(token[1]) );
                 memcpy( path_token, token[1], strlen(token[1]));
-                
-                char *_token_ = strtok(path_token,"/");
-                while( _token_ )
+                int count = 0;
+                while ( (path_token = strchr(path_token, '/')) != NULL)
+                {
+                    count++;
+                    path_token++; 
+                }
+                printf("%d\n",count);
+                //char *_token_ = strtok(path_token,"/");
+                /*
+                while( _token_ != NULL )
                 {
                     printf("%s\n",_token_);
+                     _token_ = strtok( NULL, "/" );
+                    
                     if( !strcmp(_token_,"..") )
                     {
                         change_dir(_token_);
@@ -503,6 +531,7 @@ int main()
                     else
                     {
                         FormatDirName(_token_);
+                        
                         if(ext)
                         {
                             printf("Can not cd into file\n");
@@ -511,27 +540,9 @@ int main()
                         {
                             change_dir(NextDir);
                         }
-                    }
-                    _token_ = strtok( NULL, "/" );  
-                }
-                /*
-                if( !strcmp(token[1],"..") )
-                {
-                    change_dir(token[1]);
-                }
-                else
-                {
-                    FormatDirName(token[1]);
-                    if(ext)
-                    {
-                        printf("Can not cd into file\n");
-                    }
-                    else
-                    {
-                        change_dir(NextDir);
-                    }
-                }
-                */                
+                    } 
+                                         
+                } */            
             }
         }
         else if( !strcmp(token[0], "ls") )
