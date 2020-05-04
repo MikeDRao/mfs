@@ -74,7 +74,6 @@ int16_t NextLB( uint32_t sector )
     int16_t val;
     fseek( fp, FATAddress, SEEK_SET );
     fread( &val, 2, 1, fp );
-    printf("%d", val);
     return val;
 }
 
@@ -273,7 +272,7 @@ void get(char * dir_name)
     int i; 
     uint offset;
     int size;
-    
+    int16_t nxt_clst;
     char *file_name = malloc(12);
     memset( file_name, '\0', 12 );
     memcpy( file_name, dir_name, 12);
@@ -287,20 +286,18 @@ void get(char * dir_name)
         {
             local_file = fopen(file_name, "w");
             size = dir[i].DIR_FileSize;
-            int16_t nxt_lb = NextLB(dir[i].DIR_FirstClusterLow);
             offset = LBAToOffset(dir[i].DIR_FirstClusterLow);
-
+            nxt_clst = dir[i].DIR_FirstClusterLow;
             uint8_t value[size];
 
-            while(size > 512)
+            while(nxt_clst != -1)
             {
                 fseek( fp, offset, SEEK_SET );
                 fread(&value, 512, 1, fp);
                 fwrite(&value, 512, 1, local_file);
                 size -= 512;                
-                nxt_lb = NextLB(offset);
-                offset = LBAToOffset(nxt_lb);
-
+                nxt_clst = NextLB(nxt_clst);
+                offset = LBAToOffset(nxt_clst);
             }
 
             fseek( fp, offset, SEEK_SET );
@@ -331,22 +328,39 @@ void read__(char * dir_name, int position, int num_bytes)
     int i;
     uint8_t val; 
     int offset;
-    int cluster;
+    int nxt_clst;
     FormatDirName(dir_name);
 
     for(i = 0; i < 16; i++)
     {
         if(!strncmp(dir[i].DIR_Name,NextDir,strlen(NextDir)))
         {
-            offset = LBAToOffset(dir[i].DIR_FirstClusterLow);
-            fseek(fp, offset + position, SEEK_SET);
+           
+            nxt_clst = dir[i].DIR_FirstClusterLow;
+            int num_blocks = position / 512;
+            int in_block = position % 512;
 
+            while(nxt_clst != -1 && num_blocks)
+            {   
+                nxt_clst = NextLB(nxt_clst);
+                num_blocks--;
+            }
+            offset = LBAToOffset(nxt_clst) + in_block;
+            fseek(fp, offset, SEEK_SET);
             int j;
             for(j = 0; j < num_bytes; j++)
             {
+                if(j + in_block > 512)
+                {
+                    nxt_clst = NextLB(nxt_clst);
+                    offset = LBAToOffset(nxt_clst);
+                    fseek(fp, offset, SEEK_SET);
+                    in_block = 0;
+                }
                 fread(&val, 1, 1, fp);
-                printf("%d ",val);
+                printf("0x%x ", val);
             }
+
             printf("\n");
             return;
         }
@@ -422,12 +436,10 @@ int main()
             {
                 if( !strcmp(token[1], filename) )
                 {
-                    printf("ERROR: File %s is already open.\n",filename);
-                    
+                    printf("ERROR: File %s is already open.\n",filename);    
                 }
                 else
                 {
-                    printf("here");
                     newImage(token[1]);
                 }
             }
@@ -471,7 +483,7 @@ int main()
         {
             //Print attributes
             //stat <filename> or <directory name>
-            printf("stat\n");
+
             if(!strcmp(token[1],".."))
             {
                 stat(token[1]);
@@ -513,20 +525,19 @@ int main()
                 memset( path_token, '\0', strlen(token[1]) );
                 memcpy( path_token, token[1], strlen(token[1]));
                 
+                char *ptr_path;
                 char *ptr;
-                //char *path[MAX_NUM_ARGUMENTS];
-
-                while( ( ptr = strsep(&path_token, "/") ) != NULL)
+                while( ( ptr_path = strsep(&path_token, "/") ) != NULL)
                 {
-                    printf("%s \n",ptr);
-                    /*if( !strcmp(ptr,"..") )
+
+                    ptr = strndup( ptr_path, MAX_COMMAND_SIZE );
+                    if( !strcmp(ptr_path,"..") )
                     {
-                        change_dir(ptr);
+                        change_dir(ptr_path);
                     }
                     else
                     {
-                        FormatDirName(ptr);
-                        printf("%s\n", NextDir);
+                        FormatDirName(ptr_path);
                         if(ext)
                         {
                             printf("Can not cd into file\n");
@@ -535,8 +546,8 @@ int main()
                         {
                             change_dir(NextDir);
                         }
-                    }*/
-
+                    }
+                   
                 }
             }
         }
@@ -552,7 +563,7 @@ int main()
             //READS FROM THE GIVEN FILE at the position, in bytes, specified 
             //OUTPUTS the number of bytes specified
             //read <filename> <position> <number of bytes>
-            printf("read\n");
+
             if(token_count < 4)
             {
                 printf("ERROR: invalid number of arguments.\n");
