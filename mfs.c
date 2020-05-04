@@ -413,6 +413,7 @@ int main()
         else if( !strcmp(token[0], "open") )
         {
             // OPEN FILE
+            
             if(fp != NULL)
             {
                 printf("ERROR: File system image already open.\n");
@@ -426,6 +427,7 @@ int main()
                 }
                 else
                 {
+                    printf("here");
                     newImage(token[1]);
                 }
             }
@@ -507,31 +509,24 @@ int main()
             }
             else
             {
-                 char *path_token = malloc(strlen(token[1]));
+                char *path_token = malloc(strlen(token[1]));
                 memset( path_token, '\0', strlen(token[1]) );
                 memcpy( path_token, token[1], strlen(token[1]));
-                int count = 0;
-                while ( (path_token = strchr(path_token, '/')) != NULL)
+                
+                char *ptr;
+                //char *path[MAX_NUM_ARGUMENTS];
+
+                while( ( ptr = strsep(&path_token, "/") ) != NULL)
                 {
-                    count++;
-                    path_token++; 
-                }
-                printf("%d\n",count);
-                //char *_token_ = strtok(path_token,"/");
-                /*
-                while( _token_ != NULL )
-                {
-                    printf("%s\n",_token_);
-                     _token_ = strtok( NULL, "/" );
-                    
-                    if( !strcmp(_token_,"..") )
+                    printf("%s \n",ptr);
+                    /*if( !strcmp(ptr,"..") )
                     {
-                        change_dir(_token_);
+                        change_dir(ptr);
                     }
                     else
                     {
-                        FormatDirName(_token_);
-                        
+                        FormatDirName(ptr);
+                        printf("%s\n", NextDir);
                         if(ext)
                         {
                             printf("Can not cd into file\n");
@@ -540,9 +535,9 @@ int main()
                         {
                             change_dir(NextDir);
                         }
-                    } 
-                                         
-                } */            
+                    }*/
+
+                }
             }
         }
         else if( !strcmp(token[0], "ls") )
